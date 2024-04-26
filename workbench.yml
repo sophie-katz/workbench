@@ -1,0 +1,8 @@
+tasks:
+  a:
+    run: ["echo", "a"]
+  b:
+    shell: true
+    run: ["echo", "b"]
+    dependencies:
+      - a
