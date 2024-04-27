@@ -3,7 +3,13 @@ mod shell;
 mod task_context;
 mod task_path;
 
-use std::{process::Command, rc::Rc};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    cell::{Ref, RefCell},
+    ops::Deref,
+    process::Command,
+    rc::Rc,
+};
 
 use futures::future::join_all;
 use tokio::runtime::Runtime;
@@ -17,11 +23,18 @@ pub use task_path::TaskPath;
 
 use self::{errors::ExecError, task_context::TaskContext};
 
-pub fn exec(config: &Config, logger: &Logger, task_path: TaskPath) -> Result<(), ExecError> {
-    let mut progress_context = Rc::new(ProgressContext::new(config, task_path.clone()));
+pub fn exec(
+    config: Rc<RefCell<Config>>,
+    logger: Rc<RefCell<Logger>>,
+    task_path: TaskPath,
+) -> Result<(), ExecError> {
+    let progress_context = Rc::new(RefCell::new(ProgressContext::new(
+        config.clone(),
+        task_path.clone(),
+    )));
 
     Runtime::new()?.block_on(async {
-        exec_task(&mut TaskContext::new(
+        exec_task(&TaskContext::new(
             config,
             logger,
             progress_context,
@@ -47,11 +60,11 @@ pub fn count_dependencies(config: &Config, task_path: TaskPath) -> u32 {
     count
 }
 
-async fn exec_task<'config, 'logger>(
-    task_context: &mut TaskContext<'config, 'logger>,
-) -> Result<(), ExecError> {
-    let task = task_path::get_task_at_path(task_context.config, &task_context.task_path)
-        .ok_or(ExecError::TaskNotFound(task_context.task_path.clone()))?;
+async fn exec_task(task_context: &TaskContext) -> Result<(), ExecError> {
+    let config_ref = task_context.config.as_ref().borrow();
+
+    let task = task_path::get_task_at_path(config_ref.deref(), &task_context.task_path)
+        .ok_or_else(|| ExecError::TaskNotFound(task_context.task_path.clone()))?;
 
     exec_all_dependencies(task_context, task).await?;
 
@@ -65,12 +78,14 @@ async fn exec_task<'config, 'logger>(
 
             task_context
                 .logger
+                .as_ref()
+                .borrow()
                 .emit(Level::Status, format!("running command: {:?}", command));
 
             Command::new(shell).arg("-c").arg(command).spawn()?
         }
         Run::Args(ref args) => {
-            task_context.logger.emit(
+            task_context.logger.as_ref().borrow().emit(
                 Level::Status,
                 format!("running command: {:?}", args.join(" ")),
             );
@@ -90,18 +105,12 @@ async fn exec_task<'config, 'logger>(
     Ok(())
 }
 
-async fn exec_all_dependencies<'config, 'logger>(
-    task_context: &mut TaskContext<'config, 'logger>,
-    task: &Task,
-) -> Result<(), ExecError> {
+async fn exec_all_dependencies(task_context: &TaskContext, task: &Task) -> Result<(), ExecError> {
     if let Some(ref dependencies) = task.dependencies {
         let mut futures = Vec::new();
 
         for dependency in dependencies {
-            futures.push(async {
-                let mut task_context_clone = task_context.clone();
-                exec_dependency(&mut task_context_clone, dependency.as_str()).await
-            });
+            futures.push(async { exec_dependency(task_context, dependency.as_str()).await });
         }
 
         let errors = join_all(futures.into_iter())
@@ -119,12 +128,12 @@ async fn exec_all_dependencies<'config, 'logger>(
     Ok(())
 }
 
-async fn exec_dependency<'config, 'logger>(
-    task_context: &mut TaskContext<'config, 'logger>,
+async fn exec_dependency(
+    task_context: &TaskContext,
     dependency_name: &str,
 ) -> Result<(), ExecError> {
     let dependency_path = TaskPath::parse(dependency_name)
         .ok_or_else(|| ExecError::InvalidTaskPath(dependency_name.to_owned()))?;
 
-    Ok(exec_task(&mut task_context.next(dependency_path)).await?)
+    Ok(exec_task(&task_context.next(dependency_path)).await?)
 }

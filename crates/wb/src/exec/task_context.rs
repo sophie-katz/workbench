@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     config::Config,
@@ -8,19 +8,19 @@ use crate::{
 use super::TaskPath;
 
 #[derive(Clone)]
-pub struct TaskContext<'config, 'logger> {
-    pub config: &'config Config,
-    pub logger: &'logger Logger,
-    pub progress_context: Rc<ProgressContext>,
+pub struct TaskContext {
+    pub config: Rc<RefCell<Config>>,
+    pub logger: Rc<RefCell<Logger>>,
+    pub progress_context: Rc<RefCell<ProgressContext>>,
     pub parents: Vec<TaskPath>,
     pub task_path: TaskPath,
 }
 
-impl<'config, 'logger> TaskContext<'config, 'logger> {
+impl TaskContext {
     pub fn new(
-        config: &'config Config,
-        logger: &'logger Logger,
-        progress_context: Rc<ProgressContext>,
+        config: Rc<RefCell<Config>>,
+        logger: Rc<RefCell<Logger>>,
+        progress_context: Rc<RefCell<ProgressContext>>,
         task_path: TaskPath,
     ) -> Self {
         Self {
@@ -32,13 +32,13 @@ impl<'config, 'logger> TaskContext<'config, 'logger> {
         }
     }
 
-    pub fn next(&mut self, task_path: TaskPath) -> Self {
+    pub fn next(&self, task_path: TaskPath) -> Self {
         let mut parents = self.parents.clone();
         parents.push(task_path.clone());
 
         Self {
-            config: self.config,
-            logger: self.logger,
+            config: self.config.clone(),
+            logger: self.logger.clone(),
             progress_context: self.progress_context.clone(),
             parents,
             task_path,
