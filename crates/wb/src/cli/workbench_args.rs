@@ -8,20 +8,16 @@ use clap::Parser;
 #[derive(Parser, Debug)]
 #[command(version, about, long_about)]
 pub struct WorkbenchArgs {
-    /// Name of the person to greet
-    #[arg(short, long)]
-    pub name: String,
+    /// The number of tasks to run in parallel
+    #[arg(short, long, default_value_t = 0)]
+    pub jobs: u32,
 
-    /// Number of times to greet
-    #[arg(short, long, default_value_t = 1)]
-    pub count: u8,
+    /// Whether or not to enable verbose output
+    #[arg(short, long, default_value_t = false)]
+    pub verbose: bool,
 }
 
 lazy_static! {
-    pub static ref ARGS_WITH_VALUES: HashSet<String> = HashSet::from([
-        "-n".to_owned(),
-        "--name".to_owned(),
-        "-c".to_owned(),
-        "--count".to_owned()
-    ]);
+    pub static ref ARGS_WITH_VALUES: HashSet<String> =
+        HashSet::from(["-j".to_owned(), "--jobs".to_owned(),]);
 }

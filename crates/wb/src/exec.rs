@@ -1,61 +1,61 @@
+mod errors;
+mod shell;
+mod task_context;
 mod task_path;
 
-use std::{io, process::Command};
+use std::{process::Command, rc::Rc};
 
 use futures::future::join_all;
-use thiserror::Error;
 use tokio::runtime::Runtime;
 
-use crate::config::{Config, Run, Shell, Task};
+use crate::{
+    config::{Config, Run, Task},
+    console::{Level, Logger, ProgressContext},
+};
 
 pub use task_path::TaskPath;
 
-#[derive(Error, Debug)]
-pub enum ExecError {
-    #[error("IO error: {0}")]
-    Io(#[from] io::Error),
-    #[error("Task not found: {0}")]
-    TaskNotFound(TaskPath),
-    #[error("Invalid task path: {0:?}")]
-    InvalidTaskPath(String),
-    #[error("Multiple errors occurred")]
-    Aggregate(Vec<ExecError>),
-    #[error("Shell required in task {0} for command: {1:?}")]
-    ShellRequired(TaskPath, String),
-}
+use self::{errors::ExecError, task_context::TaskContext};
 
-pub fn exec(config: &Config, task_path: TaskPath) -> Result<(), ExecError> {
-    Runtime::new()?.block_on(async { exec_task(config, &Context::new(task_path)).await })
-}
+pub fn exec(config: &Config, logger: &Logger, task_path: TaskPath) -> Result<(), ExecError> {
+    let mut progress_context = Rc::new(ProgressContext::new(config, task_path.clone()));
 
-struct Context {
-    parents: Vec<TaskPath>,
-    task_path: TaskPath,
-}
-
-impl Context {
-    fn new(task_path: TaskPath) -> Self {
-        Self {
-            parents: Vec::new(),
+    Runtime::new()?.block_on(async {
+        exec_task(&mut TaskContext::new(
+            config,
+            logger,
+            progress_context,
             task_path,
+        ))
+        .await
+    })
+}
+
+pub fn count_dependencies(config: &Config, task_path: TaskPath) -> u32 {
+    let task = task_path::get_task_at_path(config, &task_path).unwrap();
+
+    let mut count = 0;
+
+    if let Some(ref dependencies) = task.dependencies {
+        count += dependencies.len() as u32;
+
+        for dependency in dependencies {
+            count += count_dependencies(config, TaskPath::parse(dependency.as_str()).unwrap());
         }
     }
 
-    fn next(&self, task_path: TaskPath) -> Self {
-        let mut parents = self.parents.clone();
-        parents.push(task_path.clone());
-
-        Self { parents, task_path }
-    }
+    count
 }
 
-async fn exec_task(config: &Config, task_context: &Context) -> Result<(), ExecError> {
-    let task = task_path::get_task_at_path(config, &task_context.task_path)
+async fn exec_task<'config, 'logger>(
+    task_context: &mut TaskContext<'config, 'logger>,
+) -> Result<(), ExecError> {
+    let task = task_path::get_task_at_path(task_context.config, &task_context.task_path)
         .ok_or(ExecError::TaskNotFound(task_context.task_path.clone()))?;
 
-    exec_all_dependencies(config, task_context, task).await?;
+    exec_all_dependencies(task_context, task).await?;
 
-    let shell = resolve_shell(task);
+    let shell = shell::resolve_shell(task);
 
     let mut child = match task.run {
         Run::String(ref command) => {
@@ -63,44 +63,53 @@ async fn exec_task(config: &Config, task_context: &Context) -> Result<(), ExecEr
                 ExecError::ShellRequired(task_context.task_path.clone(), command.clone())
             })?;
 
+            task_context
+                .logger
+                .emit(Level::Status, format!("running command: {:?}", command));
+
             Command::new(shell).arg("-c").arg(command).spawn()?
         }
-        Run::Args(ref args) => Command::new(args[0].as_str()).args(&args[1..]).spawn()?,
+        Run::Args(ref args) => {
+            task_context.logger.emit(
+                Level::Status,
+                format!("running command: {:?}", args.join(" ")),
+            );
+
+            Command::new(args[0].as_str()).args(&args[1..]).spawn()?
+        }
     };
 
-    child.wait()?;
+    let status = child.wait()?;
+
+    let code = status.code().unwrap();
+
+    if code != 0 {
+        return Err(ExecError::TaskFailed(task_context.task_path.clone(), code));
+    }
 
     Ok(())
 }
 
-const DEFAULT_SHELL: &str = "sh";
-
-fn resolve_shell(task: &Task) -> Option<String> {
-    match task.shell {
-        None => None,
-        Some(Shell::Bool(true)) => Some(DEFAULT_SHELL.to_owned()),
-        Some(Shell::Bool(false)) => None,
-        Some(Shell::String(ref shell)) => Some(shell.clone()),
-    }
-}
-
-async fn exec_all_dependencies(
-    config: &Config,
-    task_context: &Context,
+async fn exec_all_dependencies<'config, 'logger>(
+    task_context: &mut TaskContext<'config, 'logger>,
     task: &Task,
 ) -> Result<(), ExecError> {
     if let Some(ref dependencies) = task.dependencies {
-        let errors = join_all(
-            dependencies
-                .iter()
-                .map(|dependency| exec_dependency(config, task_context, dependency.as_str()))
-                .into_iter(),
-        )
-        .await
-        .into_iter()
-        .filter(|item| item.is_err())
-        .map(|item| item.unwrap_err())
-        .collect::<Vec<_>>();
+        let mut futures = Vec::new();
+
+        for dependency in dependencies {
+            futures.push(async {
+                let mut task_context_clone = task_context.clone();
+                exec_dependency(&mut task_context_clone, dependency.as_str()).await
+            });
+        }
+
+        let errors = join_all(futures.into_iter())
+            .await
+            .into_iter()
+            .filter(|item| item.is_err())
+            .map(|item| item.unwrap_err())
+            .collect::<Vec<_>>();
 
         if !errors.is_empty() {
             return Err(ExecError::Aggregate(errors));
@@ -110,13 +119,12 @@ async fn exec_all_dependencies(
     Ok(())
 }
 
-async fn exec_dependency(
-    config: &Config,
-    task_context: &Context,
+async fn exec_dependency<'config, 'logger>(
+    task_context: &mut TaskContext<'config, 'logger>,
     dependency_name: &str,
 ) -> Result<(), ExecError> {
     let dependency_path = TaskPath::parse(dependency_name)
         .ok_or_else(|| ExecError::InvalidTaskPath(dependency_name.to_owned()))?;
 
-    Ok(exec_task(config, &task_context.next(dependency_path)).await?)
+    Ok(exec_task(&mut task_context.next(dependency_path)).await?)
 }

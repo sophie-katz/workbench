@@ -13,6 +13,7 @@ lazy_static! {
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct TaskPath {
     pub namespace: Option<String>,
+    pub built_in: bool,
     pub name: String,
     pub property: Option<String>,
 }
@@ -26,6 +27,21 @@ impl TaskPath {
                 .filter(|m| !m.is_empty())
                 .map(|m| m.to_owned());
 
+            let built_in = match namespace {
+                Some(ref namespace) => namespace == ":",
+                None => false,
+            };
+
+            let namespace = namespace
+                .map(|namespace| {
+                    if namespace.ends_with(":") {
+                        namespace[..namespace.len() - 1].to_owned()
+                    } else {
+                        namespace
+                    }
+                })
+                .filter(|namespace| !namespace.is_empty());
+
             let name = captures
                 .name("name")
                 .map(|m| m.as_str())
@@ -37,10 +53,17 @@ impl TaskPath {
                 .name("property")
                 .map(|m| m.as_str())
                 .filter(|m| !m.is_empty())
-                .map(|m| m.to_owned());
+                .map(|m| {
+                    if m.starts_with(".") {
+                        m[1..].to_owned()
+                    } else {
+                        m.to_owned()
+                    }
+                });
 
             Some(TaskPath {
                 namespace,
+                built_in,
                 name,
                 property,
             })
@@ -85,5 +108,72 @@ pub fn get_task_at_path<'config>(
         } else {
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_task_path_parse_empty() {
+        assert_eq!(TaskPath::parse(""), None);
+    }
+
+    #[test]
+    fn test_task_path_parse_name_only() {
+        assert_eq!(
+            TaskPath::parse("a"),
+            Some(TaskPath {
+                namespace: None,
+                built_in: false,
+                name: "a".to_owned(),
+                property: None,
+            })
+        );
+    }
+
+    #[test]
+    fn test_task_path_parse_built_in() {
+        assert_eq!(
+            TaskPath::parse(":a"),
+            Some(TaskPath {
+                namespace: None,
+                built_in: true,
+                name: "a".to_owned(),
+                property: None,
+            })
+        );
+    }
+
+    #[test]
+    fn test_task_path_parse_namespace() {
+        assert_eq!(
+            TaskPath::parse("a:b"),
+            Some(TaskPath {
+                namespace: Some("a".to_owned()),
+                built_in: false,
+                name: "b".to_owned(),
+                property: None,
+            })
+        );
+    }
+
+    #[test]
+    fn test_task_path_parse_property() {
+        assert_eq!(
+            TaskPath::parse("a.b"),
+            Some(TaskPath {
+                namespace: None,
+                built_in: false,
+                name: "a".to_owned(),
+                property: Some("b".to_owned()),
+            })
+        );
+    }
+
+    #[test]
+    fn test_task_path_parse_illegal() {
+        assert_eq!(TaskPath::parse("a.b`"), None);
     }
 }

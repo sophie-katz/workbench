@@ -1,6 +1,6 @@
 use lazy_static::lazy_static;
 use std::{
-    error::Error,
+    fs::File,
     io,
     path::{Path, PathBuf},
 };
@@ -27,7 +27,7 @@ pub enum LoadingError {
 }
 
 pub fn load(path: &Path) -> Result<Config, LoadingError> {
-    let config_file = std::fs::File::open(path)?;
+    let config_file = File::open(path)?;
     let config: Config = serde_yaml::from_reader(config_file)?;
 
     Ok(config)
@@ -89,4 +89,168 @@ fn is_file_or_symlink_to_file(path: &Path) -> bool {
             .symlink_metadata()
             .map(|m| m.file_type().is_file())
             .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use super::*;
+
+    #[test]
+    fn test_is_file_or_symlink_to_file_file() {
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let file_path = temp_dir.path().join("file");
+
+        File::create(&file_path).unwrap();
+
+        assert!(is_file_or_symlink_to_file(&file_path));
+    }
+
+    #[test]
+    fn test_is_file_or_symlink_to_file_directory() {
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        assert!(!is_file_or_symlink_to_file(temp_dir.path()));
+    }
+
+    #[test]
+    fn test_is_file_or_symlink_to_file_non_existant() {
+        assert!(!is_file_or_symlink_to_file(&PathBuf::from(
+            "this/file/does/not/exist"
+        )));
+    }
+
+    #[test]
+    fn test_is_file_or_symlink_to_file_symlink_to_file() {
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let file_path = temp_dir.path().join("file");
+
+        let symlink_path = temp_dir.path().join("symlink");
+
+        File::create(&file_path).unwrap();
+
+        std::os::unix::fs::symlink(&file_path, &symlink_path).unwrap();
+
+        assert!(is_file_or_symlink_to_file(&symlink_path));
+    }
+
+    #[test]
+    fn test_is_file_or_symlink_to_file_symlink_to_directory() {
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let dir_path = temp_dir.path().join("dir");
+
+        let symlink_path = temp_dir.path().join("symlink");
+
+        fs::create_dir(&dir_path).unwrap();
+
+        std::os::unix::fs::symlink(&dir_path, &symlink_path).unwrap();
+
+        assert!(!is_file_or_symlink_to_file(&symlink_path));
+    }
+
+    #[test]
+    fn test_is_file_or_symlink_to_file_broken_symlink() {
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let symlink_path = temp_dir.path().join("symlink");
+
+        std::os::unix::fs::symlink(&PathBuf::from("this/file/does/not/exist"), &symlink_path)
+            .unwrap();
+
+        assert!(!is_file_or_symlink_to_file(&symlink_path));
+    }
+
+    #[test]
+    fn test_find_config_file_in_directory_existant() {
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let file_path = temp_dir.path().join(".workbench.yaml");
+
+        File::create(&file_path).unwrap();
+
+        assert_eq!(
+            find_config_file_in_directory(&temp_dir.path(), None),
+            Some(file_path)
+        );
+    }
+
+    #[test]
+    fn test_find_config_file_in_directory_nonexistant() {
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let file_path = temp_dir.path().join(".workbench.yam");
+
+        File::create(&file_path).unwrap();
+
+        assert_eq!(find_config_file_in_directory(&temp_dir.path(), None), None,);
+    }
+
+    #[test]
+    fn test_find_config_file_in_directory_existant_overridden() {
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let file_path = temp_dir.path().join("asdf.yaml");
+
+        File::create(&file_path).unwrap();
+
+        assert_eq!(
+            find_config_file_in_directory(&temp_dir.path(), Some("asdf.yaml")),
+            Some(file_path)
+        );
+    }
+
+    #[test]
+    fn test_find_config_file_in_directory_nonexistant_overridden() {
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let file_path = temp_dir.path().join("asdf.yam");
+
+        File::create(&file_path).unwrap();
+
+        assert_eq!(
+            find_config_file_in_directory(&temp_dir.path(), Some("asdf.yaml")),
+            None,
+        );
+    }
+
+    #[test]
+    fn test_resolve_path_in_current() {
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let file_path = temp_dir.path().join("workbench.yaml");
+
+        File::create(&file_path).unwrap();
+
+        assert_eq!(resolve_path(&temp_dir.path(), None), Some(file_path),);
+    }
+
+    #[test]
+    fn test_resolve_path_in_parent() {
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let dir_path = temp_dir.path().join("dir");
+
+        fs::create_dir(&dir_path).unwrap();
+
+        let file_path = temp_dir.path().join("workbench.yaml");
+
+        File::create(&file_path).unwrap();
+
+        assert_eq!(resolve_path(dir_path.as_path(), None), Some(file_path),);
+    }
+
+    #[test]
+    fn test_resolve_path_nonexistant() {
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let dir_path = temp_dir.path().join("dir");
+
+        fs::create_dir(&dir_path).unwrap();
+
+        assert_eq!(resolve_path(dir_path.as_path(), None), None);
+    }
 }

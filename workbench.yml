@@ -3,6 +3,6 @@ tasks:
     run: ["echo", "a"]
   b:
     shell: true
-    run: ["echo", "b"]
+    run: "sleep 1 && echo b"
     dependencies:
       - a
