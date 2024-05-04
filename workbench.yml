@@ -1,8 +1,13 @@
 tasks:
   a:
-    run: ["echo", "a"]
+    shell: true
+    run: "sleep 1 && echo a"
   b:
     shell: true
-    run: "sleep 1 && echo b"
+    run: "sleep 0.5"
+  c:
+    shell: true
+    run: "sleep 1 && echo c && false"
     dependencies:
       - a
+      - b

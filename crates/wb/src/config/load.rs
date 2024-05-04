@@ -116,7 +116,7 @@ mod tests {
     }
 
     #[test]
-    fn test_is_file_or_symlink_to_file_non_existant() {
+    fn test_is_file_or_symlink_to_file_non_existent() {
         assert!(!is_file_or_symlink_to_file(&PathBuf::from(
             "this/file/does/not/exist"
         )));
@@ -165,7 +165,7 @@ mod tests {
     }
 
     #[test]
-    fn test_find_config_file_in_directory_existant() {
+    fn test_find_config_file_in_directory_existent() {
         let temp_dir = tempfile::tempdir().unwrap();
 
         let file_path = temp_dir.path().join(".workbench.yaml");
@@ -179,7 +179,7 @@ mod tests {
     }
 
     #[test]
-    fn test_find_config_file_in_directory_nonexistant() {
+    fn test_find_config_file_in_directory_nonexistent() {
         let temp_dir = tempfile::tempdir().unwrap();
 
         let file_path = temp_dir.path().join(".workbench.yam");
@@ -190,7 +190,7 @@ mod tests {
     }
 
     #[test]
-    fn test_find_config_file_in_directory_existant_overridden() {
+    fn test_find_config_file_in_directory_existent_overridden() {
         let temp_dir = tempfile::tempdir().unwrap();
 
         let file_path = temp_dir.path().join("asdf.yaml");
@@ -204,7 +204,7 @@ mod tests {
     }
 
     #[test]
-    fn test_find_config_file_in_directory_nonexistant_overridden() {
+    fn test_find_config_file_in_directory_nonexistent_overridden() {
         let temp_dir = tempfile::tempdir().unwrap();
 
         let file_path = temp_dir.path().join("asdf.yam");
@@ -244,7 +244,7 @@ mod tests {
     }
 
     #[test]
-    fn test_resolve_path_nonexistant() {
+    fn test_resolve_path_nonexistent() {
         let temp_dir = tempfile::tempdir().unwrap();
 
         let dir_path = temp_dir.path().join("dir");

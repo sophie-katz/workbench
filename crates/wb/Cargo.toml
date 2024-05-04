@@ -7,9 +7,12 @@ description = "Workbench task runner"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+async-recursion = "1.1.1"
 clap = { version = "4.5.4", features = ["derive"] }
 colored = "2.1.0"
+duct = "0.13.7"
 futures = "0.3.30"
+indicatif = "0.17.8"
 lazy_static = "1.4.0"
 regex = "1.10.4"
 serde = { version = "1.0.198", features = ["derive"] }

@@ -1,139 +1,153 @@
 mod errors;
+mod handlers;
 mod shell;
-mod task_context;
 mod task_path;
 
-use std::{
-    borrow::{Borrow, BorrowMut},
-    cell::{Ref, RefCell},
-    ops::Deref,
-    process::Command,
-    rc::Rc,
-};
+use std::sync::{Arc, RwLock};
 
 use futures::future::join_all;
 use tokio::runtime::Runtime;
 
 use crate::{
-    config::{Config, Run, Task},
-    console::{Level, Logger, ProgressContext},
+    config::{Config, Task},
+    console::{Logger, ProgressContext},
 };
 
-pub use task_path::TaskPath;
+use async_recursion::async_recursion;
 
-use self::{errors::ExecError, task_context::TaskContext};
+pub use task_path::{count_dependencies_of_path, TaskPath, TaskPathParsingError};
 
-pub fn exec(
-    config: Rc<RefCell<Config>>,
-    logger: Rc<RefCell<Logger>>,
+pub use errors::ExecError;
+
+pub use handlers::ExecOutput;
+
+pub fn exec(config: Config, logger: Logger, target_task_path: TaskPath) -> Result<bool, ExecError> {
+    let progress_context = Arc::new(RwLock::new(ProgressContext::new(
+        &config,
+        target_task_path.clone(),
+    )?));
+
+    let result = Runtime::new()?.block_on(exec_task(
+        config,
+        logger,
+        progress_context.clone(),
+        target_task_path,
+    ));
+
+    progress_context
+        .as_ref()
+        .write()
+        .expect("writer handle panicked")
+        .clear()?;
+
+    result
+}
+
+#[async_recursion]
+async fn exec_task(
+    config: Config,
+    logger: Logger,
+    progress_context: Arc<RwLock<ProgressContext>>,
     task_path: TaskPath,
-) -> Result<(), ExecError> {
-    let progress_context = Rc::new(RefCell::new(ProgressContext::new(
+) -> Result<bool, ExecError> {
+    let task = task_path::get_task_at_path(&config, &task_path)
+        .ok_or_else(|| ExecError::TaskNotFound(task_path.clone()))
+        .unwrap();
+
+    if !exec_all_dependencies(
         config.clone(),
-        task_path.clone(),
-    )));
-
-    Runtime::new()?.block_on(async {
-        exec_task(&TaskContext::new(
-            config,
-            logger,
-            progress_context,
-            task_path,
-        ))
-        .await
-    })
-}
-
-pub fn count_dependencies(config: &Config, task_path: TaskPath) -> u32 {
-    let task = task_path::get_task_at_path(config, &task_path).unwrap();
-
-    let mut count = 0;
-
-    if let Some(ref dependencies) = task.dependencies {
-        count += dependencies.len() as u32;
-
-        for dependency in dependencies {
-            count += count_dependencies(config, TaskPath::parse(dependency.as_str()).unwrap());
-        }
+        logger.clone(),
+        progress_context.clone(),
+        task.clone(),
+    )
+    .await?
+    {
+        return Ok(false);
     }
 
-    count
+    progress_context
+        .as_ref()
+        .write()
+        .expect("writer handle panicked")
+        .begin_task(&task_path, &task);
+
+    let output = handlers::handle_execution(&logger, &task_path, task).unwrap();
+
+    progress_context
+        .as_ref()
+        .write()
+        .expect("writer handle panicked")
+        .clear()
+        .unwrap();
+
+    logger.emit_exec_output(&task_path, &task, &output);
+
+    progress_context
+        .as_ref()
+        .write()
+        .expect("writer handle panicked")
+        .complete_task();
+
+    Ok(output.exit_code == 0)
 }
 
-async fn exec_task(task_context: &TaskContext) -> Result<(), ExecError> {
-    let config_ref = task_context.config.as_ref().borrow();
-
-    let task = task_path::get_task_at_path(config_ref.deref(), &task_context.task_path)
-        .ok_or_else(|| ExecError::TaskNotFound(task_context.task_path.clone()))?;
-
-    exec_all_dependencies(task_context, task).await?;
-
-    let shell = shell::resolve_shell(task);
-
-    let mut child = match task.run {
-        Run::String(ref command) => {
-            let shell = shell.ok_or_else(|| {
-                ExecError::ShellRequired(task_context.task_path.clone(), command.clone())
-            })?;
-
-            task_context
-                .logger
-                .as_ref()
-                .borrow()
-                .emit(Level::Status, format!("running command: {:?}", command));
-
-            Command::new(shell).arg("-c").arg(command).spawn()?
-        }
-        Run::Args(ref args) => {
-            task_context.logger.as_ref().borrow().emit(
-                Level::Status,
-                format!("running command: {:?}", args.join(" ")),
-            );
-
-            Command::new(args[0].as_str()).args(&args[1..]).spawn()?
-        }
-    };
-
-    let status = child.wait()?;
-
-    let code = status.code().unwrap();
-
-    if code != 0 {
-        return Err(ExecError::TaskFailed(task_context.task_path.clone(), code));
-    }
-
-    Ok(())
-}
-
-async fn exec_all_dependencies(task_context: &TaskContext, task: &Task) -> Result<(), ExecError> {
-    if let Some(ref dependencies) = task.dependencies {
+async fn exec_all_dependencies(
+    config: Config,
+    logger: Logger,
+    progress_context: Arc<RwLock<ProgressContext>>,
+    task: Task,
+) -> Result<bool, ExecError> {
+    if let Some(dependencies) = &task.dependencies {
         let mut futures = Vec::new();
 
         for dependency in dependencies {
-            futures.push(async { exec_dependency(task_context, dependency.as_str()).await });
+            futures.push(tokio::spawn(exec_dependency(
+                config.clone(),
+                logger.clone(),
+                progress_context.clone(),
+                dependency.clone(),
+            )));
         }
 
-        let errors = join_all(futures.into_iter())
+        let results = join_all(futures.into_iter())
             .await
+            .into_iter()
+            .map(|item| item?)
+            .collect::<Vec<_>>();
+
+        let any_failures = results
+            .iter()
+            .any(|result| !result.as_ref().unwrap_or(&true));
+
+        let errors = results
             .into_iter()
             .filter(|item| item.is_err())
             .map(|item| item.unwrap_err())
-            .collect::<Vec<_>>();
+            .collect::<Vec<ExecError>>();
 
         if !errors.is_empty() {
             return Err(ExecError::Aggregate(errors));
         }
+
+        if any_failures {
+            return Ok(false);
+        }
     }
 
-    Ok(())
+    Ok(true)
 }
 
 async fn exec_dependency(
-    task_context: &TaskContext,
-    dependency_name: &str,
-) -> Result<(), ExecError> {
-    let dependency_path = TaskPath::parse(dependency_name)
-        .ok_or_else(|| ExecError::InvalidTaskPath(dependency_name.to_owned()))?;
-
-    Ok(exec_task(&task_context.next(dependency_path)).await?)
+    config: Config,
+    logger: Logger,
+    progress_context: Arc<RwLock<ProgressContext>>,
+    dependency: String,
+) -> Result<bool, ExecError> {
+    exec_task(
+        config,
+        logger,
+        progress_context,
+        TaskPath::parse(dependency.as_str())?,
+    )
+    .await
 }

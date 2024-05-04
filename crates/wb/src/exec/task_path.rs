@@ -2,12 +2,19 @@ use std::fmt::Display;
 
 use lazy_static::lazy_static;
 use regex::Regex;
+use thiserror::Error;
 
 use crate::config::{Config, Task};
 
 lazy_static! {
     static ref TASK_PATH_REGEX: Regex =
         Regex::new(r"^(?<namespace>\pL*:)?(?<name>\pL+)(?<property>\.\pL+)?$").unwrap();
+}
+
+#[derive(Debug, Error, PartialEq)]
+pub enum TaskPathParsingError {
+    #[error("invalid task path: {0:?}")]
+    InvalidTaskPath(String),
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -19,7 +26,7 @@ pub struct TaskPath {
 }
 
 impl TaskPath {
-    pub fn parse(text: &str) -> Option<TaskPath> {
+    pub fn parse(text: &str) -> Result<TaskPath, TaskPathParsingError> {
         if let Some(captures) = TASK_PATH_REGEX.captures(text) {
             let namespace = captures
                 .name("namespace")
@@ -61,14 +68,14 @@ impl TaskPath {
                     }
                 });
 
-            Some(TaskPath {
+            Ok(TaskPath {
                 namespace,
                 built_in,
                 name,
                 property,
             })
         } else {
-            None
+            Err(TaskPathParsingError::InvalidTaskPath(text.to_owned()))
         }
     }
 }
@@ -111,20 +118,42 @@ pub fn get_task_at_path<'config>(
     }
 }
 
+pub fn count_dependencies_of_path(
+    config: &Config,
+    task_path: &TaskPath,
+) -> Result<u32, TaskPathParsingError> {
+    let task = get_task_at_path(config, &task_path).unwrap();
+
+    let mut count = 0;
+
+    if let Some(ref dependencies) = task.dependencies {
+        count += dependencies.len() as u32;
+
+        for dependency in dependencies {
+            count += count_dependencies_of_path(config, &TaskPath::parse(dependency.as_str())?)?;
+        }
+    }
+
+    Ok(count)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_task_path_parse_empty() {
-        assert_eq!(TaskPath::parse(""), None);
+        assert_eq!(
+            TaskPath::parse(""),
+            Err(TaskPathParsingError::InvalidTaskPath("".to_owned()))
+        );
     }
 
     #[test]
     fn test_task_path_parse_name_only() {
         assert_eq!(
             TaskPath::parse("a"),
-            Some(TaskPath {
+            Ok(TaskPath {
                 namespace: None,
                 built_in: false,
                 name: "a".to_owned(),
@@ -137,7 +166,7 @@ mod tests {
     fn test_task_path_parse_built_in() {
         assert_eq!(
             TaskPath::parse(":a"),
-            Some(TaskPath {
+            Ok(TaskPath {
                 namespace: None,
                 built_in: true,
                 name: "a".to_owned(),
@@ -150,7 +179,7 @@ mod tests {
     fn test_task_path_parse_namespace() {
         assert_eq!(
             TaskPath::parse("a:b"),
-            Some(TaskPath {
+            Ok(TaskPath {
                 namespace: Some("a".to_owned()),
                 built_in: false,
                 name: "b".to_owned(),
@@ -163,7 +192,7 @@ mod tests {
     fn test_task_path_parse_property() {
         assert_eq!(
             TaskPath::parse("a.b"),
-            Some(TaskPath {
+            Ok(TaskPath {
                 namespace: None,
                 built_in: false,
                 name: "a".to_owned(),
@@ -174,6 +203,9 @@ mod tests {
 
     #[test]
     fn test_task_path_parse_illegal() {
-        assert_eq!(TaskPath::parse("a.b`"), None);
+        assert_eq!(
+            TaskPath::parse("a.b`"),
+            Err(TaskPathParsingError::InvalidTaskPath("a.b`".to_owned()))
+        );
     }
 }

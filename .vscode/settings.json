@@ -1,9 +1,11 @@
 {
-    "editor.rulers": [
-        100
-    ],
-    "editor.formatOnSave": true,
-    "cSpell.words": [
-        "Peekable"
-    ]
+  "editor.rulers": [100],
+  "editor.formatOnSave": true,
+  "cSpell.words": [
+    "indicatif",
+    "Peekable",
+    "tempdir",
+    "tempfile",
+    "thiserror"
+  ]
 }

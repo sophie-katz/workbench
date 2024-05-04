@@ -20,7 +20,7 @@ pub fn split_args(args: Vec<String>) -> SplitArgs {
     let workbench_args = collect_workbench_args(binary_name, &mut args_iter);
 
     // Get task name
-    let task_path = read_task_path(&mut args_iter);
+    let target_task_path = read_task_path(&mut args_iter);
 
     // Get task args
     let task_args = collect_task_args(&mut args_iter);
@@ -28,7 +28,7 @@ pub fn split_args(args: Vec<String>) -> SplitArgs {
     SplitArgs {
         workbench_args,
         task_args: TaskArgs {
-            task_path,
+            target_task_path,
             task_args,
         },
     }
@@ -112,7 +112,7 @@ mod tests {
             SplitArgs {
                 workbench_args: vec!["wb".to_owned()],
                 task_args: TaskArgs {
-                    task_path: None,
+                    target_task_path: None,
                     task_args: vec![],
                 },
             }
@@ -128,7 +128,7 @@ mod tests {
             SplitArgs {
                 workbench_args: vec!["wb".to_owned(), "--help".to_owned()],
                 task_args: TaskArgs {
-                    task_path: None,
+                    target_task_path: None,
                     task_args: vec![],
                 },
             }
@@ -144,7 +144,7 @@ mod tests {
             SplitArgs {
                 workbench_args: vec!["wb".to_owned(), "-j".to_owned(), "5".to_owned()],
                 task_args: TaskArgs {
-                    task_path: None,
+                    target_task_path: None,
                     task_args: vec![],
                 },
             }
@@ -160,7 +160,7 @@ mod tests {
             SplitArgs {
                 workbench_args: vec!["wb".to_owned(), "-j".to_owned()],
                 task_args: TaskArgs {
-                    task_path: None,
+                    target_task_path: None,
                     task_args: vec![],
                 },
             }
@@ -186,7 +186,7 @@ mod tests {
                     "--help".to_owned(),
                 ],
                 task_args: TaskArgs {
-                    task_path: None,
+                    target_task_path: None,
                     task_args: vec![],
                 },
             }
@@ -202,7 +202,7 @@ mod tests {
             SplitArgs {
                 workbench_args: vec!["wb".to_owned(),],
                 task_args: TaskArgs {
-                    task_path: Some("a".to_owned()),
+                    target_task_path: Some("a".to_owned()),
                     task_args: vec![],
                 },
             }
@@ -223,7 +223,7 @@ mod tests {
             SplitArgs {
                 workbench_args: vec!["wb".to_owned(),],
                 task_args: TaskArgs {
-                    task_path: Some("a".to_owned()),
+                    target_task_path: Some("a".to_owned()),
                     task_args: vec!["b".to_owned(), "c".to_owned()],
                 },
             }
@@ -245,7 +245,7 @@ mod tests {
             SplitArgs {
                 workbench_args: vec!["wb".to_owned(), "--help".to_owned()],
                 task_args: TaskArgs {
-                    task_path: Some("a".to_owned()),
+                    target_task_path: Some("a".to_owned()),
                     task_args: vec!["b".to_owned(), "c".to_owned()],
                 },
             }
@@ -268,7 +268,7 @@ mod tests {
             SplitArgs {
                 workbench_args: vec!["wb".to_owned(), "--jobs".to_owned(), "5".to_owned()],
                 task_args: TaskArgs {
-                    task_path: Some("a".to_owned()),
+                    target_task_path: Some("a".to_owned()),
                     task_args: vec!["b".to_owned(), "c".to_owned()],
                 },
             }
@@ -290,7 +290,7 @@ mod tests {
             SplitArgs {
                 workbench_args: vec!["wb".to_owned(), "--jobs".to_owned(), "a".to_owned()],
                 task_args: TaskArgs {
-                    task_path: Some("b".to_owned()),
+                    target_task_path: Some("b".to_owned()),
                     task_args: vec!["c".to_owned()],
                 },
             }
