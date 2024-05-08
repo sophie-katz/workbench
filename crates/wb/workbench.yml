@@ -1,0 +1,23 @@
+tasks:
+  a:
+    shell: true
+    run: "sleep 1 && cat input.txt > output.txt"
+    inputs:
+      - input.txt
+    outputs:
+      - output.txt
+  b:
+    shell: true
+    run: "sleep 0.5"
+  c:
+    shell: true
+    run: "sleep 1 && echo c && false"
+    dependencies:
+      - a
+      - b
+    description: >-
+      This task will fail because it depends on a task that fails.
+    examples:
+      - run: a b c
+      - run: 1 2 3
+        description: hi

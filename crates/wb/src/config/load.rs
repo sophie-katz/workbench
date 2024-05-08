@@ -1,10 +1,25 @@
+// Copyright 2024 Sophie Katz
+//
+// This file is part of Workbench.
+//
+// Workbench is free software: you can redistribute it and/or modify it under the terms of the GNU
+// General Public License as published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// Workbench is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without
+// even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+// General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along with Workbench. If not,
+// see <https://www.gnu.org/licenses/>.
+
 use lazy_static::lazy_static;
 use std::{
     fs::File,
-    io,
     path::{Path, PathBuf},
 };
-use thiserror::Error;
+
+use crate::error::WorkbenchError;
 
 use super::Config;
 
@@ -17,16 +32,7 @@ lazy_static! {
     ];
 }
 
-#[derive(Error, Debug)]
-pub enum LoadingError {
-    #[error("error while reading config file: {0}")]
-    Io(#[from] io::Error),
-
-    #[error("error while parsing config file: {0}")]
-    Serde(#[from] serde_yaml::Error),
-}
-
-pub fn load(path: &Path) -> Result<Config, LoadingError> {
+pub fn load(path: &Path) -> Result<Config, WorkbenchError> {
     let config_file = File::open(path)?;
     let config: Config = serde_yaml::from_reader(config_file)?;
 
@@ -66,8 +72,8 @@ fn find_config_file_in_directory(
 ) -> Option<PathBuf> {
     if let Some(filename_override) = filename_override {
         let test_path = directory_path.join(filename_override);
-        if is_file_or_symlink_to_file(&test_path) {
-            Some(test_path.clone())
+        if test_path.is_file() || is_symlink_to_file(&test_path) {
+            Some(test_path)
         } else {
             None
         }
@@ -83,47 +89,47 @@ fn find_config_file_in_directory(
     }
 }
 
-fn is_file_or_symlink_to_file(path: &Path) -> bool {
-    path.is_file()
-        || path
-            .symlink_metadata()
-            .map(|m| m.file_type().is_file())
-            .unwrap_or(false)
+fn is_symlink_to_file(path: &Path) -> bool {
+    path.symlink_metadata()
+        .map(|m| m.file_type().is_file())
+        .unwrap_or(false)
 }
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::{collections::HashMap, fs};
+
+    use crate::config::{Files, Run, Shell, Task};
 
     use super::*;
 
     #[test]
-    fn test_is_file_or_symlink_to_file_file() {
+    fn test_is_symlink_to_file_file() {
         let temp_dir = tempfile::tempdir().unwrap();
 
         let file_path = temp_dir.path().join("file");
 
         File::create(&file_path).unwrap();
 
-        assert!(is_file_or_symlink_to_file(&file_path));
+        assert!(!is_symlink_to_file(&file_path));
     }
 
     #[test]
-    fn test_is_file_or_symlink_to_file_directory() {
+    fn test_is_symlink_to_file_directory() {
         let temp_dir = tempfile::tempdir().unwrap();
 
-        assert!(!is_file_or_symlink_to_file(temp_dir.path()));
+        assert!(!is_symlink_to_file(temp_dir.path()));
     }
 
     #[test]
-    fn test_is_file_or_symlink_to_file_non_existent() {
-        assert!(!is_file_or_symlink_to_file(&PathBuf::from(
+    fn test_is_symlink_to_file_non_existent() {
+        assert!(!is_symlink_to_file(&PathBuf::from(
             "this/file/does/not/exist"
         )));
     }
 
     #[test]
-    fn test_is_file_or_symlink_to_file_symlink_to_file() {
+    fn test_is_symlink_to_file_symlink_to_file() {
         let temp_dir = tempfile::tempdir().unwrap();
 
         let file_path = temp_dir.path().join("file");
@@ -134,11 +140,11 @@ mod tests {
 
         std::os::unix::fs::symlink(&file_path, &symlink_path).unwrap();
 
-        assert!(is_file_or_symlink_to_file(&symlink_path));
+        assert!(is_symlink_to_file(&symlink_path));
     }
 
     #[test]
-    fn test_is_file_or_symlink_to_file_symlink_to_directory() {
+    fn test_is_symlink_to_file_symlink_to_directory() {
         let temp_dir = tempfile::tempdir().unwrap();
 
         let dir_path = temp_dir.path().join("dir");
@@ -149,11 +155,11 @@ mod tests {
 
         std::os::unix::fs::symlink(&dir_path, &symlink_path).unwrap();
 
-        assert!(!is_file_or_symlink_to_file(&symlink_path));
+        assert!(!is_symlink_to_file(&symlink_path));
     }
 
     #[test]
-    fn test_is_file_or_symlink_to_file_broken_symlink() {
+    fn test_is_symlink_to_file_broken_symlink() {
         let temp_dir = tempfile::tempdir().unwrap();
 
         let symlink_path = temp_dir.path().join("symlink");
@@ -161,7 +167,7 @@ mod tests {
         std::os::unix::fs::symlink(&PathBuf::from("this/file/does/not/exist"), &symlink_path)
             .unwrap();
 
-        assert!(!is_file_or_symlink_to_file(&symlink_path));
+        assert!(!is_symlink_to_file(&symlink_path));
     }
 
     #[test]
@@ -252,5 +258,112 @@ mod tests {
         fs::create_dir(&dir_path).unwrap();
 
         assert_eq!(resolve_path(dir_path.as_path(), None), None);
+    }
+
+    #[test]
+    fn test_load_empty() {
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let dir_path = temp_dir.path().join("dir");
+
+        fs::create_dir(&dir_path).unwrap();
+
+        let file_path = temp_dir.path().join("workbench.yaml");
+
+        fs::write(&file_path, "").unwrap();
+
+        assert_eq!(
+            load(file_path.as_path()).unwrap(),
+            Config {
+                tasks: None,
+                namespaces: None
+            }
+        );
+    }
+
+    #[test]
+    fn test_load_invalid_path() {
+        assert!(load(PathBuf::from("this/path/does/not/exist").as_path()).is_err());
+    }
+
+    #[test]
+    fn test_load_simple() {
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let dir_path = temp_dir.path().join("dir");
+
+        fs::create_dir(&dir_path).unwrap();
+
+        let file_path = temp_dir.path().join("workbench.yaml");
+
+        fs::write(
+            &file_path,
+            r#"tasks:
+        a:
+          shell: true
+          run: "sleep 1 && cat input.txt > output.txt"
+          inputs:
+            - input.txt
+          outputs:
+            - output.txt
+        b:
+          shell: true
+          run: "sleep 0.5"
+        c:
+          shell: true
+          run: "sleep 1 && echo c && false"
+          dependencies:
+            - a
+            - b"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            load(file_path.as_path()).unwrap(),
+            Config {
+                tasks: Some(HashMap::from([
+                    (
+                        "a".to_owned(),
+                        Task {
+                            run: Run::String("sleep 1 && cat input.txt > output.txt".to_owned()),
+                            shell: Some(Shell::Bool(true)),
+                            dependencies: None,
+                            inputs: Some(Files::List(vec!["input.txt".to_owned()])),
+                            outputs: Some(Files::List(vec!["output.txt".to_owned()])),
+                            description: None,
+                            examples: None,
+                            usage: None,
+                        }
+                    ),
+                    (
+                        "b".to_owned(),
+                        Task {
+                            run: Run::String("sleep 0.5".to_owned()),
+                            shell: Some(Shell::Bool(true)),
+                            dependencies: None,
+                            inputs: None,
+                            outputs: None,
+                            description: None,
+                            examples: None,
+                            usage: None,
+                        }
+                    ),
+                    (
+                        "c".to_owned(),
+                        Task {
+                            run: Run::String("sleep 1 && echo c && false".to_owned()),
+                            shell: Some(Shell::Bool(true)),
+                            dependencies: Some(vec!["a".to_owned(), "b".to_owned()]),
+                            inputs: None,
+                            outputs: None,
+                            description: None,
+                            examples: None,
+                            usage: None,
+                        }
+                    )
+                ])),
+                namespaces: None
+            }
+        );
     }
 }

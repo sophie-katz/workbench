@@ -3,9 +3,12 @@
   "editor.formatOnSave": true,
   "cSpell.words": [
     "indicatif",
+    "Katz",
+    "mockall",
     "Peekable",
     "tempdir",
     "tempfile",
-    "thiserror"
+    "thiserror",
+    "withf"
   ]
 }
