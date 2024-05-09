@@ -4,10 +4,18 @@ on:
   push:
     branches:
       - "*"
+  workflow_dispatch:
 
 jobs:
-  build:
+  ci:
+    name: Build, lint, and test
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
+
+      - run: cargo build
+
+      - run: cargo clippy
+
+      - run: cargo test
