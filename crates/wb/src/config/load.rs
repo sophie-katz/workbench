@@ -90,9 +90,23 @@ fn find_config_file_in_directory(
 }
 
 fn is_symlink_to_file(path: &Path) -> bool {
-    path.symlink_metadata()
+    if !path
+        .symlink_metadata()
+        .map(|m| m.file_type().is_symlink())
+        .unwrap_or(false)
+    {
+        return false;
+    }
+
+    if !path
+        .metadata()
         .map(|m| m.file_type().is_file())
         .unwrap_or(false)
+    {
+        return false;
+    }
+
+    true
 }
 
 #[cfg(test)]
@@ -110,6 +124,8 @@ mod tests {
         let file_path = temp_dir.path().join("file");
 
         File::create(&file_path).unwrap();
+
+        dbg!(&file_path);
 
         assert!(!is_symlink_to_file(&file_path));
     }

@@ -289,7 +289,7 @@ mod tests {
         let output = handle_execution(&task_path, &task).unwrap();
 
         assert_eq!(output.exit_code, 0);
-        assert_eq!(output.console_output, b"a\n".to_vec());
+        assert_eq!(output.console_output, b"a\nb\n".to_vec());
     }
 
     #[test]
