@@ -6,9 +6,12 @@ on:
       - "v*"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   ci:
-    name: Build, lint, and test
+    name: Release
     runs-on: ubuntu-latest
 
     steps:
