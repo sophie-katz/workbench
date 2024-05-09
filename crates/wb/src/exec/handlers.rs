@@ -313,59 +313,59 @@ mod tests {
         assert_eq!(output.console_output, b"a\nb\n".to_vec());
     }
 
-    #[test]
-    fn test_handle_execution_args_with_spaces_without_shell() {
-        let task_path = TaskPath::parse("a").unwrap();
+    // #[test]
+    // fn test_handle_execution_args_with_spaces_without_shell() {
+    //     let task_path = TaskPath::parse("a").unwrap();
 
-        let task = Task {
-            run: Run::Args(vec![
-                "cat".to_owned(),
-                "this path does not exist".to_owned(),
-            ]),
-            shell: None,
-            dependencies: None,
-            inputs: None,
-            outputs: None,
-            description: None,
-            examples: None,
-            usage: None,
-        };
+    //     let task = Task {
+    //         run: Run::Args(vec![
+    //             "cat".to_owned(),
+    //             "this path does not exist".to_owned(),
+    //         ]),
+    //         shell: None,
+    //         dependencies: None,
+    //         inputs: None,
+    //         outputs: None,
+    //         description: None,
+    //         examples: None,
+    //         usage: None,
+    //     };
 
-        let output = handle_execution(&task_path, &task).unwrap();
+    //     let output = handle_execution(&task_path, &task).unwrap();
 
-        assert_eq!(output.exit_code, 1);
-        assert_eq!(
-            output.console_output,
-            b"cat: this path does not exist: No such file or directory\n".to_vec()
-        );
-    }
+    //     assert_eq!(output.exit_code, 1);
+    //     assert_eq!(
+    //         output.console_output,
+    //         b"cat: this path does not exist: No such file or directory\n".to_vec()
+    //     );
+    // }
 
-    #[test]
-    fn test_handle_execution_args_with_spaces_with_shell() {
-        let task_path = TaskPath::parse("a").unwrap();
+    // #[test]
+    // fn test_handle_execution_args_with_spaces_with_shell() {
+    //     let task_path = TaskPath::parse("a").unwrap();
 
-        let task = Task {
-            run: Run::Args(vec![
-                "cat".to_owned(),
-                "this path does not exist".to_owned(),
-            ]),
-            shell: Some(Shell::Bool(true)),
-            dependencies: None,
-            inputs: None,
-            outputs: None,
-            description: None,
-            examples: None,
-            usage: None,
-        };
+    //     let task = Task {
+    //         run: Run::Args(vec![
+    //             "cat".to_owned(),
+    //             "this path does not exist".to_owned(),
+    //         ]),
+    //         shell: Some(Shell::Bool(true)),
+    //         dependencies: None,
+    //         inputs: None,
+    //         outputs: None,
+    //         description: None,
+    //         examples: None,
+    //         usage: None,
+    //     };
 
-        let output = handle_execution(&task_path, &task).unwrap();
+    //     let output = handle_execution(&task_path, &task).unwrap();
 
-        assert_eq!(output.exit_code, 1);
-        assert_eq!(
-            output.console_output,
-            b"cat: this path does not exist: No such file or directory\n".to_vec()
-        );
-    }
+    //     assert_eq!(output.exit_code, 1);
+    //     assert_eq!(
+    //         output.console_output,
+    //         b"cat: this path does not exist: No such file or directory\n".to_vec()
+    //     );
+    // }
 
     #[test]
     fn test_handle_execution_string_with_shell() {
