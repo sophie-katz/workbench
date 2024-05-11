@@ -9,10 +9,34 @@ set -e
 # ==================================================================================================
 
 BUILD_FROM_SOURCE_INSTRUCTIONS_URL="https://github.com/sophie-katz/workbench/blob/main/docs/build-from-source.md"
+REPOSITORY_OWNER="sophie-katz"
+REPOSITORY_NAME="workbench"
 
 if [ -z "$WORKBENCH_DIR" ]; then
     WORKBENCH_DIR="$HOME/.workbench"
 fi
+
+# GitHub API
+
+function fetch_github_api() {
+    if [ -n "$GITHUB_TOKEN" ]; then
+        if ! curl -sSf -L \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$1"; then
+            log_error "failed to fetch GitHub API with token: $1"
+            exit 1
+        fi
+    else
+        if ! curl -sSf -L \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$1"; then
+            log_error "failed to fetch GitHub API: $1"
+        fi
+    fi
+}
 
 # Logging
 # ==================================================================================================
@@ -211,16 +235,19 @@ function get_all_releases() {
     if [ -z "$ALL_RELEASES" ]; then
         log_debug "fetching all releases from GitHub API..."
 
-        JSON="$(curl -sSf -L \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/sophie-katz/workbench/releases)"
+        JSON="$(fetch_github_api https://api.github.com/repos/$REPOSITORY_OWNER/$REPOSITORY_NAME/releases)"
 
         log_debug "request complete"
 
         ALL_RELEASES="$(echo $JSON \
             | grep -o -e '"name": "[^"]\+"' \
             | grep -o -e '\d\+\.\d\+\.\d\+')"
+
+        if [ -z "$ALL_RELEASES" ]; then
+            log_error "no releases found from GitHub API"
+            log_debug "JSON response: $JSON"
+            exit 1
+        fi
     fi
 
     echo $ALL_RELEASES
@@ -235,11 +262,7 @@ function does_release_exist() {
 
     log_debug "fetching release with tag '$TAG_NAME' from GitHub API..."
 
-    if curl -sSf -L \
-        -H "Accept: application/vnd.github+json" \
-        -H "X-GitHub-Api-Version: 2022-11-28" \
-        https://api.github.com/repos/sophie-katz/workbench/releases/tags/$TAG_NAME \
-        >/dev/null 2>/dev/null; then
+    if fetch_github_api https://api.github.com/repos/$REPOSITORY_OWNER/$REPOSITORY_NAME/releases/tags/$TAG_NAME >/dev/null 2>/dev/null; then
         return 0
     else
         return 1
@@ -268,14 +291,72 @@ function download_binary_artifact() {
 
     log_info "downloading binary for release '$RELEASE' and target triple '$TARGET_TRIPLE'..."
 
-    URL="https://github.com/sophie-katz/workbench/releases/download/v$RELEASE/workbench-$RELEASE-$TARGET_TRIPLE.tar.gz"
+    ARCHIVE_NAME="workbench-$RELEASE-$TARGET_TRIPLE.tar.gz"
+    URL="https://github.com/$REPOSITORY_OWNER/$REPOSITORY_NAME/releases/download/v$RELEASE/$ARCHIVE_NAME"
 
     mkdir -p $WORKBENCH_DIR
 
-    if ! curl -sSf -L -o $WORKBENCH_DIR/workbench.tar.gz "$URL"; then
+    if ! curl -sSf -L -o $WORKBENCH_DIR/$ARCHIVE_NAME "$URL"; then
         log_error "failed to download binary artifact: $URL"
         exit 1
     fi
+
+    echo $WORKBENCH_DIR/$ARCHIVE_NAME
+}
+
+function install_binary_artifact() {
+    ARCHIVE_PATH="$1"
+
+    log_info "installing binary to '$WORKBENCH_DIR'..."
+
+    EXTRACTION_DIR="$WORKBENCH_DIR/$(basename $ARCHIVE_PATH .tar.gz)"
+
+    if ! mkdir -p $EXTRACTION_DIR; then
+        log_error "unable to create directory '$EXTRACTION_DIR'"
+        exit 1
+    fi
+
+    if ! tar -xzf $ARCHIVE_PATH -C $EXTRACTION_DIR; then
+        log_error "unable to extract '$ARCHIVE_PATH' to '$EXTRACTION_DIR'"
+        exit 1
+    fi
+
+    if ! cp $EXTRACTION_DIR/LICENSE.txt $WORKBENCH_DIR; then
+        log_error "unable to copy license file '$EXTRACTION_DIR/LICENSE.txt' to '$WORKBENCH_DIR'"
+        exit 1
+    fi
+
+    if ! mkdir -p $WORKBENCH_DIR/bin; then
+        log_error "unable to create directory '$WORKBENCH_DIR/bin'"
+        exit 1
+    fi
+
+    if ! cp $EXTRACTION_DIR/target/*/release/wb $WORKBENCH_DIR/bin; then
+        log_error "unable to copy binary '$EXTRACTION_DIR/target/*/release/wb' to '$WORKBENCH_DIR/bin'"
+        exit 1
+    fi
+
+    if ! chmod +x $WORKBENCH_DIR/bin/wb; then
+        log_error "unable to make binary file '$WORKBENCH_DIR/bin/wb' executable"
+        exit 1
+    fi
+
+    if ! rm -r $EXTRACTION_DIR $ARCHIVE_PATH; then
+        log_error "unable to remove temporary files"
+        exit 1
+    fi
+
+    log_info "installation successful"
+}
+
+function print_install_instructions() {
+    echo
+    echo "You still need to add this to your shell profile (e.g. ~/.bashrc):"
+    echo
+    echo "export WORKBENCH_DIR=\"$WORKBENCH_DIR\""
+    echo "export PATH=\"\$WORKBENCH_DIR/bin:\$PATH\""
+    echo
+    echo "And then restart your shell. You can also run these commands now to update your current shell."
 }
 
 # Main
@@ -291,4 +372,8 @@ if [ -n "$COMMAND_LINE_ARGUMENT_RELEASE" ]; then
     log_debug "overriding release to install with '$COMMAND_LINE_ARGUMENT_RELEASE'"
 fi
 
-download_binary_artifact "$(resolve_target_triple)" "$(resolve_release)"
+ARCHIVE_NAME="$(download_binary_artifact "$(resolve_target_triple)" "$(resolve_release)")"
+
+install_binary_artifact "$ARCHIVE_NAME"
+
+print_install_instructions
