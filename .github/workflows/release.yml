@@ -40,7 +40,7 @@ jobs:
       - name: Check crate version
         id: version
         run: |
-          VERSION=$(grep -oP '$version = "\K[^"]+"^' crates/wb/Cargo.toml)
+          VERSION=$(grep -n 1 -oP 'version = "\K[^"]+' crates/wb/Cargo.toml)
           if [ "$VERSION" != "${GITHUB_REF/refs\/tags\/v/}" ]; then
             echo "error: version mismatch between Cargo.toml and Git tag: $VERSION != ${GITHUB_REF/refs\/tags\/v/}"
             exit 1
