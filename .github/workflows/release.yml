@@ -42,9 +42,9 @@ jobs:
         run: |
           CARGO_TOML_VERSION=""
           if [ "${{ matrix.runner_os }}" == "macos-latest" ]; then
-            CARGO_TOML_VERSION=$(cat crates/wb/Cargo.toml | grep -P '^version = ' | grep -Po '\d+\.\d+\.\d+')
-          else
             CARGO_TOML_VERSION=$(cat crates/wb/Cargo.toml | grep -e '^version = ' | grep -o -e '\d\+\.\d\+\.\d\+')
+          else
+            CARGO_TOML_VERSION=$(cat crates/wb/Cargo.toml | grep -P '^version = ' | grep -Po '\d+\.\d+\.\d+')
           fi
           GIT_TAG_VERSION=${GITHUB_REF/refs\/tags\/v/}
           if [ "$CARGO_TOML_VERSION" != "$GIT_TAG_VERSION" ]; then
