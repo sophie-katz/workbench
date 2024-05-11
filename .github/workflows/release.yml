@@ -3,8 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - "v*"
-  workflow_dispatch:
+      - "v*.*.*"
 
 permissions:
   contents: write
@@ -38,6 +37,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Check crate version
+        id: version
+        run: |
+          VERSION=$(grep -oP 'version = "\K[^"]+' Cargo.toml)
+          if [ "$VERSION" != "${GITHUB_REF/refs\/tags\/v/}" ]; then
+            echo "error: version mismatch between Cargo.toml and Git tag: $VERSION != ${GITHUB_REF/refs\/tags\/v/}"
+            exit 1
+          fi
+
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
       - name: Build artifact
         uses: houseabsolute/actions-rust-cross@v0
         with:
@@ -58,6 +68,9 @@ jobs:
 
           tar czvf workbench-0.1.0-${{ matrix.target }}.tar.gz $RELEASE_DIR/wb LICENSE.txt
 
-      # - name: Create a release in GitHub
-      #   uses: softprops/action-gh-release@v2
-      #   if: startsWith(github.ref, 'refs/tags/')
+      - name: Create a release in GitHub
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          draft: true
+          files: "workbench-${{ steps.version.outputs.VERSION }}-${{ matrix.target }}.tar.gz"
