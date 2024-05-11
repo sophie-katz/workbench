@@ -66,7 +66,7 @@ jobs:
       - name: Build Cross Docker images
         working-directory: _cross
         run: |
-          cargo build-docker-image aarch64-apple-darwin --tag local
+          cargo xtask build-docker-image aarch64-apple-darwin --tag local
 
       - name: Configure Cross
         run: |
