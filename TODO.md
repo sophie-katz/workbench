@@ -40,14 +40,14 @@
   - [ ] Bookmark links for documentation
   - [ ] Sidebar for documentation with auto-scrolling and auto-highlighting
 - [ ] Website hosted on GitHub Pages
-- [ ] Binary builds in CI
-- [ ] Release on GitHub
-- [ ] Downloads for
-  - [ ] Linux x86 32-bit
-  - [ ] Linux x86 64-bit
-  - [ ] Linux ARM 64-bit
-  - [ ] macOS x86 64-bit
-  - [ ] macOS ARM 64-bit
+- [x] Binary builds in CI
+- [x] Release on GitHub
+- [x] Downloads for
+  - [x] Linux x86 32-bit
+  - [x] Linux x86 64-bit
+  - [x] Linux ARM 64-bit
+  - [x] macOS x86 64-bit
+  - [x] macOS ARM 64-bit
 - [ ] Install script done
   - [ ] Linux
   - [ ] macOS

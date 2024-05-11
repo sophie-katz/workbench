@@ -72,7 +72,7 @@ jobs:
             exit 1
           fi
 
-          tar czvf workbench-0.1.0-${{ matrix.target }}.tar.gz $RELEASE_DIR/wb LICENSE.txt
+          tar czvf workbench-${{ steps.version.outputs.VERSION }}-${{ matrix.target }}.tar.gz $RELEASE_DIR/wb LICENSE.txt
 
       - name: Create a release in GitHub
         uses: softprops/action-gh-release@v2
