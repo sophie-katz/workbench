@@ -21,7 +21,7 @@ jobs:
             runner_os: ubuntu-latest
             command: both
           - target: aarch64-apple-darwin
-            runner_os: macOS-latest
+            runner_os: macos-latest
             command: build
           - target: x86_64-unknown-linux-gnu
             runner_os: ubuntu-latest
@@ -40,7 +40,12 @@ jobs:
       - name: Check crate version
         id: version
         run: |
-          CARGO_TOML_VERSION=$(cat crates/wb/Cargo.toml | grep -P '^version = ' | grep -Po '\d+\.\d+\.\d+')
+          CARGO_TOML_VERSION=""
+          if [ "${{ matrix.runner_os }}" == "macos-latest" ]; then
+            CARGO_TOML_VERSION=$(cat crates/wb/Cargo.toml | grep -P '^version = ' | grep -Po '\d+\.\d+\.\d+')
+          else
+            CARGO_TOML_VERSION=$(cat crates/wb/Cargo.toml | grep -e '^version = ' | grep -o -e '\d\+\.\d\+\.\d\+')
+          fi
           GIT_TAG_VERSION=${GITHUB_REF/refs\/tags\/v/}
           if [ "$CARGO_TOML_VERSION" != "$GIT_TAG_VERSION" ]; then
             echo "error: version mismatch between Cargo.toml and Git tag: $CARGO_TOML_VERSION != $GIT_TAG_VERSION"
@@ -74,4 +79,4 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         with:
           draft: true
-          files: "workbench-${{ steps.version.outputs.VERSION }}-${{ matrix.target }}.tar.gz"
+          files: "workbench-*"
