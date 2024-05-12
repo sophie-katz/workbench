@@ -30,7 +30,7 @@
 
 ## Release
 
-- [ ] Website rough draft done
+- [x] Website rough draft done
 - [ ] Website polished
   - [ ] Terminal output for `wb` commands
   - [ ] Proper copied text
@@ -39,6 +39,8 @@
   - [ ] Logo
   - [ ] Bookmark links for documentation
   - [ ] Sidebar for documentation with auto-scrolling and auto-highlighting
+  - [ ] Test on other browsers
+  - [ ] Mobile
 - [ ] Website hosted on GitHub Pages
 - [x] Binary builds in CI
 - [x] Release on GitHub
@@ -48,14 +50,15 @@
   - [x] Linux ARM 64-bit
   - [x] macOS x86 64-bit
   - [x] macOS ARM 64-bit
-- [ ] Install script done
-  - [ ] Linux
-  - [ ] macOS
+- [x] Install script done
+  - [x] Linux
+  - [x] macOS
 - [ ] Examples written
   - [ ] TypeScript
   - [ ] Rust
   - [ ] Python
-- [ ] YAML specification written
+- [x] YAML specification written
 - [ ] Readme written
 - [ ] GitHub metadata populated
 - [ ] Roadmap written
+- [ ] Polish help
