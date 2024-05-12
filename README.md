@@ -6,17 +6,11 @@
 <p align="center">
     <img width="500px" src="./docs/assets//logo.svg" />
     <br />
-    <i>A workspace manager and task runner.</i>
+    <i>A workspace manager and task runner</i>
 </p>
 
 <br />
 
 # Getting started
-
-Run this command to install Workbench:
-
-```shell
-curl -sSf https://raw.githubusercontent.com/sophie-katz/workbench/main/install.sh | sh
-```
 
 You can find the full documentation on the [Workbench website ↗](https://workbench.sophiekatz.us/).
