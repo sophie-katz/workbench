@@ -31,16 +31,17 @@
 ## Release
 
 - [x] Website rough draft done
-- [ ] Website polished
-  - [ ] Terminal output for `wb` commands
-  - [ ] Proper copied text
+- [x] Website polished
+  - [x] Terminal output for `wb` commands
+  - [x] Proper copied text
   - [x] Streamlined front page
   - [x] Favicon
   - [x] Logo
-  - [ ] Bookmark links for documentation
-  - [ ] Sidebar for documentation with auto-scrolling and auto-highlighting
-  - [ ] Test on other browsers
-  - [ ] Mobile
+  - [x] Bookmark links for documentation
+  - [x] Sidebar for documentation with auto-scrolling and auto-highlighting
+  - [x] Test on other browsers
+  - [x] Mobile
+  - [x] Accessibility
 - [x] Website hosted on GitHub Pages
 - [x] Binary builds in CI
 - [x] Release on GitHub
